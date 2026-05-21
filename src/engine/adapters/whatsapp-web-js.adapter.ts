@@ -194,6 +194,30 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       this.callbacks.onMessageAck?.(msg.id._serialized, ack);
     });
 
+    // Capture messages sent from the linked phone (not through the API).
+    // 'message_create' fires for every message (sent + received); we only
+    // handle fromMe=true here — received messages are already handled above.
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    this.client.on('message_create', async msg => {
+      if (!msg.fromMe) return;
+      try {
+        const outgoingMessage: IncomingMessage = {
+          id: msg.id._serialized,
+          from: msg.from,
+          to: msg.to,
+          chatId: msg.to,
+          body: msg.body,
+          type: msg.type,
+          timestamp: msg.timestamp,
+          fromMe: true,
+          isGroup: msg.to.endsWith('@g.us'),
+        };
+        this.callbacks.onOutgoingMessage?.(outgoingMessage);
+      } catch (error) {
+        this.logger.error('Error processing outgoing message from phone', String(error));
+      }
+    });
+
     this.client.on('disconnected', reason => {
       this.setStatus(EngineStatus.DISCONNECTED);
       this.callbacks.onDisconnected?.(reason);

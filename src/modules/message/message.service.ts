@@ -417,7 +417,7 @@ export class MessageService {
    * Save outgoing message to database.
    * When called before sending, creates a record with PENDING status.
    */
-  private async saveOutgoingMessage(
+  async saveOutgoingMessage(
     sessionId: string,
     data: {
       waMessageId?: string;

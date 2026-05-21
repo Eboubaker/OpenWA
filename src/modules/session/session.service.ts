@@ -5,6 +5,8 @@ import {
   BadRequestException,
   OnModuleDestroy,
   OnModuleInit,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
@@ -16,6 +18,7 @@ import { createLogger } from '../../common/services/logger.service';
 import { EventsGateway } from '../events/events.gateway';
 import { WebhookService } from '../webhook/webhook.service';
 import { HookManager } from '../../core/hooks';
+import { MessageService } from '../message/message.service';
 
 interface ReconnectState {
   attempts: number;
@@ -43,6 +46,8 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
     private readonly eventsGateway: EventsGateway,
     private readonly webhookService: WebhookService,
     private readonly hookManager: HookManager,
+    @Inject(forwardRef(() => MessageService))
+    private readonly messageService: MessageService,
   ) {}
 
   /**
@@ -291,6 +296,18 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
         });
         // Update last active timestamp
         void this.sessionRepository.update(id, { lastActiveAt: new Date() });
+
+        // Persist incoming message to DB
+        void this.messageService.saveIncomingMessage(id, {
+          waMessageId: message.id,
+          chatId: message.chatId,
+          from: message.from,
+          to: message.to,
+          body: message.body,
+          type: message.type,
+          timestamp: message.timestamp,
+        });
+
         // Convert IncomingMessage to plain object for dispatch
         const messageData = { ...message };
 
@@ -311,6 +328,23 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
             // Emit real-time event to WebSocket clients
             this.eventsGateway.emitMessage(id, finalMessage as Record<string, unknown>);
           });
+      },
+      onOutgoingMessage: (message): void => {
+        this.logger.debug(`Outgoing message from phone to ${message.chatId}`, {
+          sessionId: id,
+          messageId: message.id,
+          action: 'phone_outgoing',
+        });
+        void this.sessionRepository.update(id, { lastActiveAt: new Date() });
+        // Persist outgoing message sent from the linked phone
+        void this.messageService.saveOutgoingMessage(id, {
+          waMessageId: message.id,
+          chatId: message.chatId,
+          body: message.body,
+          type: message.type,
+          timestamp: message.timestamp,
+          status: undefined, // will default to PENDING then be updated by ack
+        });
       },
       onDisconnected: (reason: string): void => {
         this.logger.warn(`Session disconnected: ${reason}`, {
