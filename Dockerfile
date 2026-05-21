@@ -63,15 +63,18 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies only
+# Install production dependencies only as openwa user (avoids slow chown later)
+RUN chown openwa:openwa /app
+USER openwa
 RUN npm ci --omit=dev && npm cache clean --force
+USER root
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Create data directories with proper permissions
+# Create data directories and fix ownership of dist + data only
 RUN mkdir -p ./data/sessions ./data/media && \
-    chown -R openwa:openwa /app
+    chown -R openwa:openwa ./data ./dist
 
 # Note: Running as root to allow Docker socket access for orchestration
 # For production with stricter security, consider using a Docker socket proxy
