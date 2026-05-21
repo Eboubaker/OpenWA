@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { Client, LocalAuth, MessageMedia } from 'whatsapp-web.js';
 import * as qrcode from 'qrcode';
 import * as path from 'path';
+import * as fs from 'fs';
 import {
   IWhatsAppEngine,
   EngineStatus,
@@ -100,6 +101,22 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       });
 
       this.setupEventHandlers();
+
+      // Remove stale Chromium singleton lock left by a previous container/process.
+      // Without this, Chromium refuses to start with "profile appears to be in use".
+      const profileDir = path.join(
+        path.resolve(this.config.sessionDataPath),
+        '.wwebjs_auth',
+        `session-${this.config.sessionId}`,
+      );
+      const lockFile = path.join(profileDir, 'SingletonLock');
+      try {
+        fs.unlinkSync(lockFile);
+        this.logger.log(`Removed stale Chromium lock: ${lockFile}`);
+      } catch {
+        // File doesn't exist — that's fine
+      }
+
       await this.client.initialize();
     } catch (error) {
       this.setStatus(EngineStatus.FAILED);
