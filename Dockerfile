@@ -66,7 +66,7 @@ COPY package*.json ./
 # Install production dependencies only as openwa user (avoids slow chown later)
 RUN chown openwa:openwa /app
 USER openwa
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev --cache /app/.npm-cache && rm -rf /app/.npm-cache
 USER root
 
 # Copy built application from builder stage
